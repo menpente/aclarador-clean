@@ -1,0 +1,19 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# OS
+.DS_Store
