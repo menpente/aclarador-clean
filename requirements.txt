@@ -1,3 +1,4 @@
 Groq
 streamlit
 Pillow
+langsmith

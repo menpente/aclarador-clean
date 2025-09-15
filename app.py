@@ -7,6 +7,21 @@ import sys
 # Add the current directory to the path so we can import our modules
 sys.path.append(os.path.dirname(__file__))
 
+# LangSmith tracing setup (simple)
+try:
+    from langsmith import traceable
+    # Set environment variables for LangSmith
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = "aclarador"
+    LANGSMITH_ENABLED = True
+except ImportError:
+    # Fallback decorator if LangSmith not available
+    def traceable(name=None):
+        def decorator(func):
+            return func
+        return decorator
+    LANGSMITH_ENABLED = False
+
 from agent_coordinator import AgentCoordinator
 
 # Initialize the Groq client (fallback option)
@@ -16,6 +31,7 @@ except:
     client = None
 
 # Function to process the input text with original method (fallback)
+@traceable(name="process_text_original")
 def process_text_original(input_text):
     """Original processing method using Groq directly"""
     if not client:
@@ -59,6 +75,7 @@ def process_text_original(input_text):
 
 # Initialize agent coordinator
 @st.cache_resource
+@traceable(name="initialize_coordinator")
 def initialize_coordinator():
     """Initialize the agent coordinator (cached for performance)"""
     try:
@@ -91,6 +108,12 @@ coordinator, has_knowledge_base = initialize_coordinator()
 # Sidebar for configuration
 st.sidebar.write("## ⚙️ Configuración")
 
+# LangSmith status
+if LANGSMITH_ENABLED:
+    st.sidebar.success("🔍 LangSmith Tracing: Activo")
+else:
+    st.sidebar.info("🔍 LangSmith: No disponible")
+
 # Processing method selection
 processing_method = st.sidebar.radio(
     "Método de procesamiento:",
@@ -106,9 +129,9 @@ if processing_method == "Sistema multiagente" and coordinator:
     selected_agents = []
     
     for agent_name, description in available_agents.items():
-        if agent_name != "analyzer":  # Analyzer always runs
+        if agent_name not in ["analyzer", "rewriter"]:  # Analyzer and rewriter always run
             if st.sidebar.checkbox(
-                f"**{agent_name.title()}**", 
+                f"**{agent_name.title()}**",
                 value=agent_name in ["grammar", "style", "validator"],
                 help=description
             ):
@@ -225,8 +248,7 @@ if process_button and user_input.strip():
             st.write("## 📋 Resultado")
             st.write(processed_output)
     
-    # Clear input after processing
-    st.session_state["user_input"] = ""
+    # Keep input text visible after processing for user reference
 
 # Footer
 st.write("---")

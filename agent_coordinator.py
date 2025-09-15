@@ -4,6 +4,7 @@ from agents.grammar_agent import GrammarAgent
 from agents.style_agent import StyleAgent
 from agents.seo_agent import SEOAgent
 from agents.validator_agent import ValidatorAgent
+from agents.rewriter_agent import RewriterAgent
 
 class AgentCoordinator:
     """Coordinates multiple agents for comprehensive text analysis"""
@@ -15,6 +16,7 @@ class AgentCoordinator:
         self.style = StyleAgent()
         self.seo = SEOAgent()
         self.validator = ValidatorAgent()
+        self.rewriter = RewriterAgent()
         
         self.use_knowledge_base = use_knowledge_base
         self.knowledge_retrieval = None
@@ -66,14 +68,29 @@ class AgentCoordinator:
             "knowledge_guidelines": []
         }
         
-        # Step 3: Process with each agent
-        current_text = text
-        
-        # Create context for agents
+        # Step 3: Get comprehensive rewrite first
         agent_context = {
             "knowledge_retrieval": self.knowledge_retrieval if self.use_knowledge_base else None,
             "text_analysis": analysis
         }
+
+        # Use rewriter for main text revision
+        rewriter_result = self.rewriter.analyze(text, context=agent_context)
+        current_text = rewriter_result.get("rewritten_text", text)
+
+        # Add rewriter improvements
+        for improvement in rewriter_result.get("improvements", []):
+            results["improvements"].append({
+                "agent": "rewriter",
+                "type": improvement["type"],
+                "description": improvement["description"],
+                "reason": improvement["reason"]
+            })
+
+        # Add rewriter to agent results
+        results["agent_results"]["rewriter"] = rewriter_result
+
+        # Step 4: Process with other agents for additional refinements
         
         if "grammar" in agents_to_use:
             grammar_result = self.grammar.analyze(current_text, context=agent_context)
@@ -122,7 +139,7 @@ class AgentCoordinator:
                     "reference": rec.get("pdf_reference", "")
                 })
         
-        # Step 4: Collect all knowledge base guidelines from agents
+        # Step 5: Collect all knowledge base guidelines from agents
         all_kb_guidelines = []
         for agent_name, agent_result in results["agent_results"].items():
             kb_guidelines = agent_result.get("kb_guidelines", [])
@@ -141,7 +158,7 @@ class AgentCoordinator:
         
         results["knowledge_guidelines"] = unique_guidelines[:5]  # Limit to 5 guidelines
         
-        # Step 5: Final validation
+        # Step 6: Final validation
         if "validator" in agents_to_use:
             validation = self.validator.analyze(current_text, context=results)
             results["final_validation"] = validation
@@ -154,6 +171,7 @@ class AgentCoordinator:
         """Get list of available agents and their descriptions"""
         return {
             "analyzer": "Analyzes text and classifies issues",
+            "rewriter": "Provides comprehensive text rewriting for clarity",
             "grammar": "Checks and corrects grammar errors",
             "style": "Suggests style improvements for clarity",
             "seo": "Optimizes for search engines while maintaining clarity",
