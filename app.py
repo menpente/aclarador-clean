@@ -44,10 +44,21 @@ def load_system_prompt():
         print(f"Error loading system prompt: {e}")
         return None
 
-# Function to process the input text
-@traceable(name="process_text")
-def process_text(input_text):
-    """Process text using comprehensive system prompt"""
+# Function to process the input text (with conditional tracing)
+def process_text(input_text, enable_tracing=True):
+    """Process text using comprehensive system prompt with optional tracing"""
+
+    # Apply tracing decorator conditionally
+    if enable_tracing and LANGSMITH_ENABLED:
+        @traceable(name="process_text")
+        def _process_with_tracing(text):
+            return _process_text_core(text)
+        return _process_with_tracing(input_text)
+    else:
+        return _process_text_core(input_text)
+
+def _process_text_core(input_text):
+    """Core text processing logic"""
     if not client:
         return "Error: GROQ_API_KEY no configurado"
 
@@ -102,11 +113,26 @@ st.write("*Herramienta para mejorar la claridad de textos en español*")
 # Sidebar for configuration
 st.sidebar.write("## ⚙️ Configuración")
 
-# LangSmith status
+# LangSmith tracing toggle
 if LANGSMITH_ENABLED:
-    st.sidebar.success("🔍 LangSmith Tracing: Activo")
+    tracing_enabled = st.sidebar.toggle(
+        "🔍 LangSmith Tracing",
+        value=True,
+        help="Activar/desactivar el seguimiento de LangSmith para análisis detallado"
+    )
+
+    if tracing_enabled:
+        st.sidebar.success("✅ Tracing activo")
+        # Set environment variables when enabled
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_PROJECT"] = "aclarador"
+    else:
+        st.sidebar.info("⏸️ Tracing desactivado")
+        # Disable tracing when toggled off
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
 else:
     st.sidebar.info("🔍 LangSmith: No disponible")
+    tracing_enabled = False
 
 # System prompt status
 system_prompt_loaded = load_system_prompt() is not None
@@ -147,7 +173,8 @@ with col2:
 # Process text when button is clicked
 if process_button and user_input.strip():
     with st.spinner('Procesando texto...'):
-        processed_output = process_text(user_input)
+        # Use the tracing state from the toggle
+        processed_output = process_text(user_input, enable_tracing=tracing_enabled)
         st.write("## 📋 Resultado")
         st.markdown(processed_output)
 
@@ -172,5 +199,8 @@ with col_f2:
 with col_f3:
     st.write("**📊 Estado del sistema:**")
     st.write(f"• Manual de Estilo: {'✅ Cargado' if system_prompt_loaded else '⚠️ Básico'}")
-    st.write(f"• LangSmith: {'✅ Activo' if LANGSMITH_ENABLED else '❌ No disponible'}")
+    if LANGSMITH_ENABLED:
+        st.write(f"• LangSmith: {'🔍 Activo' if tracing_enabled else '⏸️ Inactivo'}")
+    else:
+        st.write("• LangSmith: ❌ No disponible")
     st.write(f"• Groq API: {'✅ Configurado' if client else '❌ No configurado'}")
